@@ -1,0 +1,125 @@
+# =============================================
+# 🚀 TFT DATA INGESTION - CLOUD DEPLOYMENT
+# =============================================
+
+# Google Cloud Run Deployment
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: tft-data-ingestion
+  namespace: tft-production
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/minScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/memory: "2Gi"
+        run.googleapis.com/cpu: "1000m"
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 300
+      containers:
+      - name: data-ingestion
+        image: gcr.io/PROJECT_ID/tft-data-ingestion:v1.0
+        ports:
+        - containerPort: 8001
+        env:
+        # Polygon.io Configuration
+        - name: POLYGON_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tft-secrets
+              key: polygon-api-key
+        - name: POLYGON_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tft-secrets
+              key: polygon-secret-key
+        
+        # Reddit Configuration
+        - name: REDDIT_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: tft-secrets
+              key: reddit-client-id
+        - name: REDDIT_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: tft-secrets
+              key: reddit-client-secret
+        - name: REDDIT_USER_AGENT
+          value: "Kironix_Trading_Sentiment_v1.0"
+        
+        # Service Configuration
+        - name: SERVICE_PORT
+          value: "8001"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: RATE_LIMIT_SECONDS
+          value: "0.5"
+        - name: MAX_RETRIES
+          value: "3"
+        
+        # Kafka Configuration (Cloud)
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "YOUR_KAFKA_CLOUD_ENDPOINT:9092"
+        - name: KAFKA_TOPIC_PREFIX
+          value: "tft"
+        
+        # Redis Configuration (Cloud)
+        - name: REDIS_HOST
+          value: "YOUR_REDIS_CLOUD_ENDPOINT"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: tft-secrets
+              key: redis-password
+        
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+---
+# Secret Configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tft-secrets
+  namespace: tft-production
+type: Opaque
+data:
+  # Base64 encoded secrets (replace with your actual base64 encoded values)
+  polygon-api-key: dDlwNms3QzVXZm8yZkFsazdnbjZDanlRdGFBSlBWT0k=  # t9p6k7C5Wfo2fAlk7gn6CjyQtaAJPVOI
+  polygon-secret-key: Nm9wMGRwbTc3czRQTUY5VWk1TzQwZndpeUlOanR3RUU=  # 6op0dpm77s4PMF9Ui5O40fwiyINjtwEE
+  reddit-client-id: a1ZjcVBxQ1QxWmY0NkViUTItNzdUdw==  # kVcqPqCT1Zf46EbQ2-77Tw
+  reddit-client-secret: bU93U0EtUHpfWlBzREtqMWdvVWZnQmgzMjNWbk9B  # mOwSA-Pz_ZPsDKj1goUfgBh323VnOA
+  redis-password: YOUR_REDIS_PASSWORD_BASE64
